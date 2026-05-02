@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(.venv/bin/python -c \"from gtts import gTTS; print\\('gTTS OK'\\)\")",
+      "Bash(python3 -m py_compile /Users/tatwikmeshram/Documents/Voice_Bot/app.py)",
+      "Bash(.venv/bin/pip list *)",
+      "Bash(.venv/bin/python -c \"import app; print\\('OK — brain:', 'claude' if app._claude_client else 'rules'\\)\")",
+      "Bash(.venv/bin/pip uninstall *)",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(.venv/bin/python app.py)",
+      "Bash(curl -s http://localhost:5001/health)",
+      "Bash(rm -f /tmp/didi_tts_cache/*.mp3)",
+      "Read(//tmp/**)",
+      "Bash(pkill -f \"python app.py\")",
+      "Bash(.venv/bin/python -c \"import app; print\\('OK'\\)\")"
+    ]
+  }
+}
