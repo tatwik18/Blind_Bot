@@ -51,6 +51,8 @@ try:
 except ImportError:
     pass
 
+PORT = int(os.environ.get("PORT", 8080))
+
 try:
     from google import genai as _genai
     from google.genai import types as _gtypes
