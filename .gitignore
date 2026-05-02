@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+venv/
+didi_progress.db
+students.json
+app_output.log

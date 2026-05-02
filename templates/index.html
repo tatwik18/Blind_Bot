@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description"
+        content="Free voice-based Hinglish English tutor for visually impaired students. No buttons needed." />
+  <meta name="theme-color" content="#0d1117" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <title>Didi — Your Hinglish English Tutor 🎓</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+
+  <!--
+    ════════════════════════════════════════════════════════
+     TAP OVERLAY
+     WHY: Chrome blocks audio autoplay until a real user
+     gesture occurs (click/tap). This overlay catches that
+     one gesture, unlocks audio, then disappears forever.
+     After this — everything is 100% voice-controlled.
+    ════════════════════════════════════════════════════════
+  -->
+  <div id="tap-overlay"
+       role="dialog"
+       aria-modal="true"
+       aria-label="Tap anywhere to start the Didi tutor bot">
+
+    <div class="overlay-card">
+      <div class="overlay-emoji" aria-hidden="true">🎓</div>
+      <h1 class="overlay-title">Didi</h1>
+      <p  class="overlay-sub">Aapki Hinglish English Teacher</p>
+
+      <div class="overlay-tap" aria-hidden="true">
+        <span class="tap-finger">👆</span>
+        <span class="tap-ripple"></span>
+      </div>
+
+      <p class="overlay-hint">Tap karo — phir sirf bolna hai!</p>
+      <p class="overlay-hint-en">Tap anywhere · Then speak only · No buttons needed</p>
+
+      <div class="overlay-cmds" aria-label="Voice commands preview">
+        <span class="cmd-chip">"Shuru karo"</span>
+        <span class="cmd-chip">"Band karo"</span>
+        <span class="cmd-chip">"Quiz shuru karo"</span>
+        <span class="cmd-chip">"Dheere bolo"</span>
+        <span class="cmd-chip">"Phir bolo"</span>
+      </div>
+    </div>
+
+  </div><!-- /#tap-overlay -->
+
+
+  <!-- Skip link for keyboard / screen-reader -->
+  <a href="#main" class="skip-link">Skip to main content</a>
+
+
+  <!--
+    ════════════════════════════════════════════════════════
+     HEADER
+    ════════════════════════════════════════════════════════
+  -->
+  <header role="banner">
+    <span class="hdr-icon" aria-hidden="true">🎓</span>
+    <div class="hdr-text">
+      <h1>Didi — Your English Teacher</h1>
+      <p class="hdr-sub">आपकी मुफ्त Hinglish Voice Tutor · Free · Online</p>
+    </div>
+    <div class="tts-badge" id="tts-badge" aria-label="Voice engine status" aria-live="polite">
+      <span class="tts-dot" id="tts-dot"></span>
+      <span id="tts-label">Google TTS</span>
+    </div>
+  </header>
+
+
+  <!--
+    ════════════════════════════════════════════════════════
+     MAIN
+    ════════════════════════════════════════════════════════
+  -->
+  <main id="main" role="main">
+
+    <!-- ── Daily Word ──────────────────────────── -->
+    <section class="daily-word" aria-label="Word of the day">
+      <span aria-hidden="true">📚</span>
+      <span class="dw-label">Aaj ka word:</span>
+      <strong id="dw-word" class="dw-word">{{ daily_word.word }}</strong>
+      <span aria-hidden="true" class="dw-dash">—</span>
+      <span id="dw-hindi" class="dw-hindi">{{ daily_word.hindi }}</span>
+    </section>
+
+    <!--
+      ── Mode Indicator Banner ───────────────────
+      Shown only when a sub-mode (quiz / story / pronunciation) is active.
+      Hidden by default via JS / hidden attribute.
+    -->
+    <div id="mode-indicator"
+         class="mode-indicator"
+         role="status"
+         aria-live="polite"
+         hidden>
+      <span id="mode-label"></span>
+      <span class="mode-hint">· "Wapas jao" boliye normal chat ke liye</span>
+    </div>
+
+    <!-- ── BIG STATUS (primary feedback) ──────── -->
+    <section class="status-wrap"
+             aria-live="polite"
+             aria-atomic="true"
+             aria-label="Bot status">
+
+      <div class="status-ring" id="status-ring" aria-hidden="true"></div>
+
+      <div class="status-body">
+        <div class="status-emoji" id="status-emoji" aria-hidden="true">💤</div>
+        <div class="status-msg"  id="status-msg">Tap karo shuru karne ke liye</div>
+      </div>
+
+    </section>
+
+    <!-- ── Live Transcript ─────────────────────── -->
+    <div class="live-tx-bar" aria-live="polite" aria-label="What you are saying">
+      <span class="live-tx-icon" aria-hidden="true">🎙️</span>
+      <span class="live-tx-label">Aap bol rahe ho:</span>
+      <span id="live-tx" class="live-tx-text"></span>
+    </div>
+
+    <!-- ── Conversation Log ─────────────────────── -->
+    <section aria-label="Conversation history">
+      <div id="chat-log"
+           class="chat-log"
+           role="log"
+           aria-live="polite"
+           aria-relevant="additions text"
+           tabindex="0">
+
+        <article class="bubble bot-bubble" aria-label="Didi says">
+          <span class="bbl-who" aria-hidden="true">🧕 Didi</span>
+          <p class="bbl-text">
+            Namaste beta! 🙏 Main aapki English teacher hoon.<br/>
+            Pehle screen ko <strong>tap karo</strong> — phir sirf bolna hai, koi button nahi!<br/>
+            Shuru karne ke liye <strong>"Shuru karo"</strong> boliye, phir apna <strong>Student ID number</strong> batao.
+          </p>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- ── Voice Command Cheatsheet ─────────────── -->
+    <section class="cmd-sheet" aria-label="Voice commands you can say">
+      <h2 class="cs-title">🗣️ Kya bol sakte ho?</h2>
+      <div class="cs-grid">
+
+        <div class="cs-row">
+          <kbd>"Shuru karo"</kbd>
+          <span>Bot shuru karo / Start</span>
+        </div>
+        <div class="cs-row">
+          <kbd>"3" / "teen" / "three"</kbd>
+          <span>Apna Student ID boliye (1–20)</span>
+        </div>
+        <div class="cs-row">
+          <kbd>"Band karo"</kbd>
+          <span>Bot band karo / Stop</span>
+        </div>
+        <div class="cs-row">
+          <kbd>"Phir bolo"</kbd>
+          <span>Last reply dobara suno</span>
+        </div>
+        <div class="cs-row">
+          <kbd>"Dheere bolo"</kbd>
+          <span>Didi dheere bolegi</span>
+        </div>
+        <div class="cs-row">
+          <kbd>"Tez bolo"</kbd>
+          <span>Didi tez bolegi</span>
+        </div>
+        <div class="cs-row">
+          <kbd>"Aaj kya seekha" / "Summary"</kbd>
+          <span>Aaj ka session summary suno</span>
+        </div>
+        <div class="cs-row">
+          <kbd>"Last class mein kya seekha"</kbd>
+          <span>Pichli class ka summary suno</span>
+        </div>
+
+        <!-- ── v6 New Commands ── -->
+        <div class="cs-row cs-row-new">
+          <kbd>"Quiz shuru karo"</kbd>
+          <span>📝 Daily quiz shuru karo (5 sawaal)</span>
+        </div>
+        <div class="cs-row cs-row-new">
+          <kbd>"Pronunciation practice"</kbd>
+          <span>🎙️ Words bolne ki practice karo</span>
+        </div>
+        <div class="cs-row cs-row-new">
+          <kbd>"Interactive story"</kbd>
+          <span>📖 Kahani suno + 2 sawaalon ke jawab do</span>
+        </div>
+        <div class="cs-row cs-row-new">
+          <kbd>"Meri progress batao"</kbd>
+          <span>📊 Apni progress suniye</span>
+        </div>
+        <div class="cs-row cs-row-new">
+          <kbd>"Wapas jao"</kbd>
+          <span>↩️ Quiz/Story mode se wapas normal chat</span>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Today's Session Progress ────────────── -->
+    <section class="progress" aria-label="Today's session progress">
+      <h2 class="prog-title">Aaj ki Progress 📈</h2>
+      <div class="prog-grid">
+        <div class="prog-stat" aria-label="Sentences spoken">
+          <span class="prog-num" id="stat-sentences">0</span>
+          <span class="prog-lbl">Sentences Bole</span>
+        </div>
+        <div class="prog-stat" aria-label="Words learned">
+          <span class="prog-num" id="stat-words">0</span>
+          <span class="prog-lbl">Words Seekhe</span>
+        </div>
+        <div class="prog-stat" aria-label="Minutes practiced">
+          <span class="prog-num" id="stat-mins">0</span>
+          <span class="prog-lbl">Minutes Practice</span>
+        </div>
+      </div>
+    </section>
+
+    <!--
+      ── Overall / Lifetime Progress (from SQLite) ─
+      Hidden until student logs in, then shown by JS.
+    -->
+    <section class="progress db-progress" id="db-progress"
+             aria-label="Overall lifetime progress"
+             hidden>
+      <h2 class="prog-title">Overall Progress 🏆</h2>
+      <div class="prog-grid">
+        <div class="prog-stat" aria-label="Streak days">
+          <span class="prog-num prog-streak" id="stat-streak">0</span>
+          <span class="prog-lbl">🔥 Streak Days</span>
+        </div>
+        <div class="prog-stat" aria-label="Weekly quiz score">
+          <span class="prog-num prog-quiz" id="stat-quiz-pct">—</span>
+          <span class="prog-lbl">📝 Quiz (7 din)</span>
+        </div>
+        <div class="prog-stat" aria-label="Words practiced total">
+          <span class="prog-num prog-words" id="stat-total-words">—</span>
+          <span class="prog-lbl">🎙️ Words Practiced</span>
+        </div>
+      </div>
+    </section>
+
+  </main><!-- /main -->
+
+
+  <!--
+    ════════════════════════════════════════════════════════
+     FOOTER
+    ════════════════════════════════════════════════════════
+  -->
+  <footer role="contentinfo">
+    <p>Made with ❤️ for visually impaired students · 100% Voice-Based · Free</p>
+    <p class="ftr-shortcut">Keyboard: <kbd>R</kbd> = Repeat last message &nbsp;|&nbsp; <kbd>Esc</kbd> = Exit mode</p>
+    <p class="ftr-shortcut"><a href="/teacher" style="color:#8b949e;font-size:0.78rem;">Teacher Dashboard →</a></p>
+  </footer>
+
+
+  <!-- ARIA assertive live region (screen readers) -->
+  <div id="sr-live"
+       role="status"
+       aria-live="assertive"
+       aria-atomic="true"
+       class="sr-only"></div>
+
+  <script src="/static/script.js"></script>
+
+</body>
+</html>

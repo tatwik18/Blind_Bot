@@ -1,0 +1,20 @@
+{
+  "name": "Didi — Hinglish English Tutor",
+  "short_name": "Didi Bot",
+  "description": "Free real-time Hinglish speech-to-speech English tutor for visually impaired students",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#56d364",
+  "lang": "hi-IN",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "accessibility"],
+  "screenshots": []
+}

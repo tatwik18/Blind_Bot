@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Didi — Teacher Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d1117;
+      --surface:  #161b22;
+      --surface2: #21262d;
+      --border:   #30363d;
+      --green:    #56d364;
+      --blue:     #79c0ff;
+      --orange:   #f78166;
+      --yellow:   #e3b341;
+      --red:      #f85149;
+      --muted:    #8b949e;
+      --text:     #e6edf3;
+      --bot-bg:   #1a2b1c;
+      --user-bg:  #1c2535;
+    }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px 60px;
+    }
+
+    /* ── Header ── */
+    .hdr {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 32px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 18px;
+    }
+    .hdr-icon { font-size: 2rem; }
+    .hdr h1   { font-size: 1.5rem; font-weight: 700; color: var(--green); }
+    .hdr p    { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+    .back-btn {
+      margin-left: auto;
+      background: var(--surface2);
+      color: var(--blue);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 18px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+    .back-btn:hover { background: var(--border); }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 22px;
+      min-width: 120px;
+      text-align: center;
+    }
+    .stat-num  { font-size: 1.8rem; font-weight: 700; color: var(--green); }
+    .stat-lbl  { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── Search ── */
+    .search-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+    .search-bar input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .search-bar input:focus { border-color: var(--blue); }
+
+    /* ── Student grid ── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .card:hover { border-color: var(--blue); }
+    .card.empty { opacity: 0.45; }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+    .card-head:hover { background: var(--surface2); }
+
+    .id-badge {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+    .occupied .id-badge { background: var(--green); color: #0d1117; }
+    .empty    .id-badge { background: var(--surface2); color: var(--muted); }
+
+    .card-info { flex: 1; min-width: 0; }
+    .card-name {
+      font-weight: 600;
+      font-size: 1rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .empty .card-name { color: var(--muted); font-weight: 400; }
+    .card-meta { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+    .chevron {
+      font-size: 0.8rem;
+      color: var(--muted);
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+    .card.open .chevron { transform: rotate(180deg); }
+
+    /* ── Card body (history) ── */
+    .card-body {
+      display: none;
+      padding: 14px 16px;
+      border-top: 1px solid var(--border);
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .card.open .card-body { display: block; }
+
+    .no-history {
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-align: center;
+      padding: 20px 0;
+    }
+
+    .msg { margin-bottom: 10px; }
+    .msg-who {
+      font-size: 0.7rem;
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+    .msg.bot  .msg-who { color: var(--green); }
+    .msg.user .msg-who { color: var(--blue);  }
+    .msg-text {
+      font-size: 0.83rem;
+      line-height: 1.55;
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 8px 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.bot  .msg-text { background: var(--bot-bg);  }
+    .msg.user .msg-text { background: var(--user-bg); }
+
+    /* ── Card actions ── */
+    .card-actions {
+      padding: 10px 16px;
+      display: flex;
+      gap: 8px;
+      border-top: 1px solid var(--border);
+    }
+    .btn-del {
+      background: transparent;
+      border: 1px solid var(--red);
+      color: var(--red);
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-del:hover { background: #3d1515; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-size: 0.88rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ── Proficiency badge ── */
+    .prof-badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-top: 4px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .prof-Beginner     { background: #1c2d4a; color: #79c0ff; border: 1px solid #79c0ff44; }
+    .prof-Intermediate { background: #2d2500; color: #e3b341; border: 1px solid #e3b34144; }
+    .prof-Advanced     { background: #0d2b14; color: #56d364; border: 1px solid #56d36444; }
+
+    /* ── Clusters section ── */
+    .section-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 14px;
+    }
+    .clusters-wrap { margin-bottom: 28px; }
+    .clusters-grid {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .cluster-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      min-width: 220px;
+      flex: 1;
+      border-left-width: 4px;
+    }
+    .cluster-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .cluster-num  { font-weight: 700; font-size: 0.9rem; }
+    .cluster-size { font-size: 0.75rem; color: var(--muted); }
+    .cluster-desc { font-size: 0.82rem; color: var(--text); margin-bottom: 10px; line-height: 1.5; }
+    .cluster-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .student-chip {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2px 10px;
+      font-size: 0.75rem;
+      color: var(--text);
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 500px) {
+      .stats-bar { gap: 10px; }
+      .stat-card { padding: 10px 14px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="hdr">
+    <span class="hdr-icon">🎓</span>
+    <div>
+      <h1>Teacher Dashboard</h1>
+      <p>Didi — Student Accounts &amp; History</p>
+    </div>
+    <a href="/" class="back-btn">← Bot pe jaao</a>
+  </header>
+
+  <!-- Stats bar -->
+  {% set occupied = slots | selectattr('occupied') | list %}
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="stat-num">{{ occupied | length }}</div>
+      <div class="stat-lbl">Students Registered</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">{{ 20 - occupied | length }}</div>
+      <div class="stat-lbl">Slots Available</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">{{ occupied | selectattr('msg_count') | map(attribute='msg_count') | sum }}</div>
+      <div class="stat-lbl">Total Saved Messages</div>
+    </div>
+  </div>
+
+  <!-- Learning Clusters -->
+  {% if clusters %}
+  <div class="clusters-wrap">
+    <div class="section-title">Learning Pattern Clusters</div>
+    <div class="clusters-grid">
+      {% for c in clusters %}
+      <div class="cluster-card" style="border-left-color: {{ c.color }}">
+        <div class="cluster-header">
+          <span class="cluster-num" style="color: {{ c.color }}">Group {{ c.id }}</span>
+          <span class="cluster-size">{{ c.size }} student{{ 's' if c.size != 1 }}</span>
+        </div>
+        <div class="cluster-desc">{{ c.description }}</div>
+        <div class="cluster-chips">
+          {% for student in c.students %}
+          <span class="student-chip">{{ student.name }}</span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Search -->
+  <div class="search-bar">
+    <input type="text" id="search" placeholder="Search student name or ID…" oninput="filterCards(this.value)" />
+  </div>
+
+  <!-- Student grid -->
+  <div class="grid" id="grid">
+    {% for s in slots %}
+    <div class="card {% if s.occupied %}occupied{% else %}empty{% endif %}"
+         id="card-{{ s.id }}"
+         data-name="{{ s.name | default('') | lower }}"
+         data-id="{{ s.id }}">
+
+      <div class="card-head" onclick="toggleCard({{ s.id }})">
+        <div class="id-badge">{{ s.id }}</div>
+
+        <div class="card-info">
+          {% if s.occupied %}
+            <div class="card-name">{{ s.name }}</div>
+            <div class="card-meta">
+              Joined: {{ s.created_at }}
+              {% if s.last_seen and s.last_seen != '—' %}
+                &nbsp;·&nbsp; Last seen: {{ s.last_seen }}
+              {% endif %}
+              &nbsp;·&nbsp; {{ s.msg_count }} saved msg{{ 's' if s.msg_count != 1 }}
+            </div>
+            {% if s.proficiency %}
+            <span class="prof-badge prof-{{ s.proficiency }}">{{ s.proficiency }}</span>
+            {% endif %}
+          {% else %}
+            <div class="card-name">Empty slot</div>
+            <div class="card-meta">No student registered</div>
+          {% endif %}
+        </div>
+
+        {% if s.occupied %}
+          <span class="chevron">▼</span>
+        {% endif %}
+      </div>
+
+      {% if s.occupied %}
+      <div class="card-body">
+        {% if s.last_session %}
+          {% for turn in s.last_session %}
+          <div class="msg {{ turn.role if turn.role == 'user' else 'bot' }}">
+            <div class="msg-who">
+              {{ '👤 Student' if turn.role == 'user' else '🧕 Didi' }}
+            </div>
+            <div class="msg-text">{{ turn.content }}</div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="no-history">Koi saved history nahi hai abhi.</div>
+        {% endif %}
+      </div>
+
+      <div class="card-actions">
+        <button class="btn-del" onclick="deleteStudent('{{ s.id }}', '{{ s.name }}')">
+          🗑 Delete Account
+        </button>
+      </div>
+      {% endif %}
+
+    </div>
+    {% endfor %}
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    function toggleCard(id) {
+      const card = document.getElementById('card-' + id);
+      if (!card.classList.contains('occupied')) return;
+      card.classList.toggle('open');
+      // Scroll newly opened card into view
+      if (card.classList.contains('open')) {
+        setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+      }
+    }
+
+    function filterCards(query) {
+      const q = query.toLowerCase().trim();
+      document.querySelectorAll('.card').forEach(card => {
+        const name = card.dataset.name || '';
+        const id   = card.dataset.id   || '';
+        card.style.display = (!q || name.includes(q) || id.includes(q)) ? '' : 'none';
+      });
+    }
+
+    async function deleteStudent(sid, name) {
+      if (!confirm(`Delete ${name} (ID ${sid})? This cannot be undone.`)) return;
+      try {
+        const res = await fetch(`/teacher/delete/${sid}`, { method: 'POST' });
+        const d   = await res.json();
+        if (d.success) {
+          showToast(`${name} ka account delete ho gaya.`);
+          setTimeout(() => location.reload(), 1200);
+        } else {
+          showToast('Delete nahi hua — try again.');
+        }
+      } catch (_) {
+        showToast('Network error. Try again.');
+      }
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2800);
+    }
+  </script>
+
+</body>
+</html>
