@@ -995,7 +995,9 @@ def weak_words(sid):
 #  Entry Point
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
-    PORT = 5001
+    import os
+
+    PORT = int(os.environ.get("PORT", 5000))
 
     if _GROQ_KEY:
         brain_label = f"Groq AI ✓  ({_GROQ_MODEL})"
