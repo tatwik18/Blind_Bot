@@ -990,31 +990,3 @@ def weak_words(sid):
     """Return up to 5 words a student most often mispronounces."""
     return jsonify({"words": db.get_weak_words(sid.strip())})
 
-
-# ─────────────────────────────────────────────
-#  Entry Point
-# ─────────────────────────────────────────────
-if __name__ == "__main__":
-    import os
-
-    PORT = int(os.environ.get("PORT", 5000))
-
-    if _GROQ_KEY:
-        brain_label = f"Groq AI ✓  ({_GROQ_MODEL})"
-    elif _gemini_client:
-        brain_label = "Gemini AI ✓  (gemini-2.5-flash)"
-    else:
-        brain_label = "No AI keys found — add GROQ_API_KEY or GEMINI_API_KEY to .env"
-
-    print("=" * 62)
-    print("  Didi — Hinglish Tutor Bot  v5  (AI-Only)")
-    print("=" * 62)
-    print(f"  Open this in Chrome → http://localhost:{PORT}")
-    print(f"  Brain  : {brain_label}")
-    print(f"  Voice  : Google TTS (Indian female voice)")
-    print("=" * 62)
-
-    threading.Thread(target=_precache_worker, daemon=True).start()
-    # Auto-train TextCNN on synthetic data (skipped if already trained)
-    threading.Thread(target=_cnn_text_init, kwargs={"verbose": True}, daemon=True).start()
-    app.run(debug=False, host="0.0.0.0", port=PORT)
