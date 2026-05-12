@@ -92,6 +92,7 @@ HOW TO TELL THE STORY — smooth, natural flow, no forced repetition:
 Start with: "Ek choti si story suno."
 Then tell 3 to 4 sentences in simple English. After each sentence, say "Matlab:" and give the Hindi meaning.
 End with a one-line moral: "Moral: [lesson]."
+CRITICAL: Always finish the COMPLETE story in ONE response. Never cut off mid-sentence. Never stop before the Moral line.
 Do NOT say "Mere saath boliye" or ask for repetition during a story unless the student asks to practise.
 
 Example story:
@@ -414,7 +415,7 @@ def gemini_response(message: str, history: list, extra_prompt: str = "") -> str:
     ]
     config = _gtypes.GenerateContentConfig(
         system_instruction=DIDI_SYSTEM_PROMPT + extra_prompt,
-        max_output_tokens=600,
+        max_output_tokens=1200,
         temperature=0.75,
     )
     response = _gemini_client.models.generate_content(
@@ -446,7 +447,7 @@ def groq_response(message: str, history: list, extra_prompt: str = "") -> str:
         json={
             "model"      : _GROQ_MODEL,
             "messages"   : messages,
-            "max_tokens" : 600,
+            "max_tokens" : 1200,
             "temperature": 0.75,
         },
         timeout=25,
