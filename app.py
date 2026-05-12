@@ -37,6 +37,7 @@ from agents import (
 from quiz_data   import QUIZ_QUESTIONS, PRONUNCIATION_WORDS
 from story_data  import STORIES
 from cnn_text    import ensure_model_trained as _cnn_text_init
+from lstm_text   import ensure_model_trained as _lstm_text_init
 from cnn_audio   import score_pronunciation as cnn_score_pronunciation
 from cnn_audio   import detect_confidence, get_didi_comfort_line, cnn_status
 
@@ -1182,6 +1183,7 @@ def weak_words(sid):
 # Start background workers (runs under both gunicorn and direct python)
 threading.Thread(target=_precache_worker, daemon=True).start()
 threading.Thread(target=_cnn_text_init, kwargs={"verbose": True}, daemon=True).start()
+threading.Thread(target=_lstm_text_init, daemon=True).start()
 
 if __name__ == "__main__":
     app.run(debug=False, host="0.0.0.0", port=PORT)

@@ -3,279 +3,664 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description"
-        content="Free voice-based Hinglish English tutor for visually impaired students. No buttons needed." />
-  <meta name="theme-color" content="#0d1117" />
+  <meta name="description" content="Free voice-based Hinglish English tutor for visually impaired students." />
+  <meta name="theme-color" content="#0a0f1e" />
   <link rel="manifest" href="/static/manifest.json" />
-  <title>Didi — Your Hinglish English Tutor 🎓</title>
+  <title>Didi — Your Hinglish English Tutor</title>
   <link rel="stylesheet" href="/static/style.css" />
+
+<style>
+/* ══════════════════════════════════════════════════════
+   ROOT & RESET
+══════════════════════════════════════════════════════ */
+:root {
+  --bg:         #0a0f1e;
+  --surface:    #111827;
+  --surface2:   #1c2536;
+  --border:     #2a3550;
+  --green:      #4ade80;
+  --blue:       #38bdf8;
+  --yellow:     #fbbf24;
+  --red:        #f87171;
+  --muted:      #6b7280;
+  --text:       #e2e8f0;
+  --robot-eye:  #38bdf8;
+  --robot-glow: rgba(56,189,248,0.4);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── HEADER ───────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+.hdr-icon { font-size: 1.6rem; }
+.hdr-text h1 { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+.hdr-sub     { font-size: 0.72rem; color: var(--muted); margin-top: 1px; }
+.tts-badge {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.75rem; color: var(--muted);
+}
+.tts-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted);
+  transition: background 0.4s;
+}
+.tts-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+/* ── DAILY WORD ──────────────────────────────────── */
+.daily-word {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: linear-gradient(90deg, #0f2744 0%, #0a1628 100%);
+  border: 1px solid #1e3a5f;
+  border-radius: 10px;
+  padding: 10px 18px;
+  margin: 14px 20px 0;
+  font-size: 0.88rem;
+}
+.dw-label  { color: var(--muted); }
+.dw-word   { color: var(--blue); font-size: 1rem; font-weight: 700; }
+.dw-dash   { color: var(--muted); }
+.dw-hindi  { color: var(--yellow); font-weight: 600; }
+
+/* ── MODE INDICATOR ──────────────────────────────── */
+.mode-indicator {
+  display: flex; align-items: center; gap: 8px;
+  margin: 10px 20px 0;
+  padding: 8px 16px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.82rem; font-weight: 600;
+  color: var(--yellow);
+}
+.mode-hint { color: var(--muted); font-weight: 400; font-size: 0.75rem; }
+
+/* ── ROBOT SVG ── */
+:root { --robot-eye: #00b4d8; --robot-glow: rgba(0,180,216,0.5); }
+
+/* State-based eye colour overrides */
+body.state-listening  { --robot-eye: #00b4d8; --robot-glow: rgba(0,180,216,0.6); }
+body.state-speaking   { --robot-eye: #4ade80; --robot-glow: rgba(74,222,128,0.6); }
+body.state-thinking   { --robot-eye: #f6c90e; --robot-glow: rgba(246,201,14,0.6); }
+body.state-loading    { --robot-eye: #f6c90e; --robot-glow: rgba(246,201,14,0.4); }
+
+.robot-eye-left,
+.robot-eye-right {
+  fill: var(--robot-eye);
+  filter: drop-shadow(0 0 6px var(--robot-glow));
+  transition: fill 0.4s, filter 0.4s;
+}
+.robot-pupil-left,
+.robot-pupil-right {
+  fill: #fff;
+  opacity: 0.85;
+}
+
+/* Blink animation */
+.robot-eye-left, .robot-eye-right {
+  animation: eye-blink 4s ease-in-out infinite;
+}
+.robot-eye-right { animation-delay: 0.15s; }
+@keyframes eye-blink {
+  0%,92%,100% { transform: scaleY(1); transform-origin: center; }
+  96%          { transform: scaleY(0.1); transform-origin: center; }
+}
+
+/* Mouth — pulses when speaking */
+.robot-mouth {
+  stroke: var(--robot-eye);
+  filter: drop-shadow(0 0 4px var(--robot-glow));
+  transition: stroke 0.4s;
+}
+body.state-speaking .robot-mouth {
+  animation: mouth-talk 0.35s ease-in-out infinite alternate;
+}
+@keyframes mouth-talk {
+  from { d: path("M 72 118 Q 96 128 120 118"); }
+  to   { d: path("M 72 118 Q 96 132 120 118"); }
+}
+
+/* Antenna glow */
+.robot-antenna-ball {
+  fill: var(--robot-eye);
+  filter: drop-shadow(0 0 5px var(--robot-glow));
+  animation: antenna-pulse 2s ease-in-out infinite;
+  transition: fill 0.4s;
+}
+@keyframes antenna-pulse {
+  0%,100% { opacity: 1; r: 6; }
+  50%      { opacity: 0.5; r: 4; }
+}
+
+
+
+/* ══════════════════════════════════════════════════════
+   BOTTOM SECTIONS
+══════════════════════════════════════════════════════ */
+.bottom-sections {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin: 14px 20px;
+}
+.bottom-sections .progress {
+  width: 100%;
+  max-width: 480px;
+}
+
+/* ── STATS ───────────────────────────────────────── */
+.progress {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}
+.prog-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+.prog-grid {
+  display: flex; gap: 12px; flex-wrap: wrap;
+}
+.prog-stat {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: center;
+  min-width: 70px;
+}
+.prog-num { display: block; font-size: 1.5rem; font-weight: 700; color: var(--blue); }
+.prog-streak { color: #f97316; }
+.prog-quiz   { color: var(--green); }
+.prog-words  { color: #a78bfa; }
+.prog-lbl    { display: block; font-size: 0.65rem; color: var(--muted); margin-top: 3px; }
+
+.db-progress { border-color: #1e3a5f; }
+
+/* ── VOICE COMMANDS ──────────────────────────────── */
+.cmd-sheet {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}
+.cs-title {
+  font-size: 0.82rem; font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+.cs-grid { display: flex; flex-direction: column; gap: 6px; }
+.cs-row  { display: flex; align-items: center; gap: 10px; font-size: 0.78rem; }
+.cs-row kbd {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-family: monospace;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  color: var(--blue);
+}
+.cs-row span { color: var(--muted); }
+.cs-row-new kbd { color: var(--yellow); }
+
+/* ── FOOTER ──────────────────────────────────────── */
+footer {
+  text-align: center;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.8;
+  margin-top: 4px;
+}
+footer a { color: var(--muted); }
+.ftr-shortcut { font-size: 0.7rem; }
+
+/* ══════════════════════════════════════════════════════
+   TAP OVERLAY
+══════════════════════════════════════════════════════ */
+#tap-overlay {
+  position: fixed; inset: 0; z-index: 999;
+  background: rgba(10,15,30,0.97);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(6px);
+  transition: opacity 0.5s;
+}
+#tap-overlay.fade-out { opacity: 0; pointer-events: none; }
+.overlay-card {
+  text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  max-width: 360px; padding: 0 24px;
+}
+.overlay-robot-wrap {
+  width: 140px;
+  animation: robot-float 3s ease-in-out infinite;
+}
+.overlay-title { font-size: 2rem; font-weight: 800; color: var(--text); }
+.overlay-sub   { color: var(--muted); font-size: 0.9rem; }
+.overlay-tap   { position: relative; display: inline-flex; }
+.tap-finger    { font-size: 2.2rem; animation: tap-bounce 1.4s ease-in-out infinite; }
+@keyframes tap-bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+.tap-ripple {
+  position: absolute; inset: -12px;
+  border-radius: 50%;
+  border: 2px solid var(--blue);
+  animation: ripple 1.4s ease-out infinite;
+}
+@keyframes ripple { 0%{opacity:1;transform:scale(0.6)} 100%{opacity:0;transform:scale(2)} }
+.overlay-hint    { font-size: 0.95rem; font-weight: 600; color: var(--text); }
+.overlay-hint-en { font-size: 0.78rem; color: var(--muted); }
+.overlay-cmds { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.cmd-chip {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  color: var(--blue);
+}
+
+/* ── Screen-reader only ──────────────────────────── */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; overflow: hidden; clip: rect(0,0,0,0);
+  white-space: nowrap; border: 0;
+}
+.skip-link {
+  position: absolute; top: -40px; left: 0;
+  background: var(--blue); color: #000;
+  padding: 8px 16px; z-index: 1000;
+  border-radius: 0 0 8px 0;
+}
+.skip-link:focus { top: 0; }
+
+/* ── RESPONSIVE ──────────────────────────────────── */
+@media (max-width: 720px) {
+  .main-layout {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+  .robot-panel {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 20px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .robot-wrap { width: 120px; }
+  .chat-log { max-height: 320px; }
+  .bottom-sections { grid-template-columns: 1fr; }
+}
+</style>
 </head>
 
 <body>
 
-  <!--
-    ════════════════════════════════════════════════════════
-     TAP OVERLAY
-     WHY: Chrome blocks audio autoplay until a real user
-     gesture occurs (click/tap). This overlay catches that
-     one gesture, unlocks audio, then disappears forever.
-     After this — everything is 100% voice-controlled.
-    ════════════════════════════════════════════════════════
-  -->
-  <div id="tap-overlay"
-       role="dialog"
-       aria-modal="true"
-       aria-label="Tap anywhere to start the Didi tutor bot">
+<!-- ── TAP OVERLAY ─────────────────────────────────── -->
+<div id="tap-overlay" role="dialog" aria-modal="true"
+     aria-label="Tap anywhere to start Didi tutor bot">
+  <div class="overlay-card">
 
-    <div class="overlay-card">
-      <div class="overlay-emoji" aria-hidden="true">🎓</div>
-      <h1 class="overlay-title">Didi</h1>
-      <p  class="overlay-sub">Aapki Hinglish English Teacher</p>
+    <!-- Mini robot on overlay -->
+    <div class="overlay-robot-wrap" aria-hidden="true">
+      <svg viewBox="0 0 192 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Antenna -->
+        <line x1="96" y1="8" x2="96" y2="38" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+        <circle class="robot-antenna-ball" cx="96" cy="7" r="6"/>
+        <!-- Head -->
+        <rect x="28" y="38" width="136" height="100" rx="22" fill="#1e293b"/>
+        <!-- Visor -->
+        <rect x="38" y="52" width="116" height="70" rx="14" fill="#0a1221"/>
+        <!-- Eyes -->
+        <ellipse class="robot-eye-left"  cx="78"  cy="84" rx="18" ry="18"/>
+        <ellipse class="robot-eye-right" cx="114" cy="84" rx="18" ry="18"/>
+        <circle class="robot-pupil-left"  cx="78"  cy="84" r="8"/>
+        <circle class="robot-pupil-right" cx="114" cy="84" r="8"/>
+        <!-- Mouth -->
+        <path class="robot-mouth" d="M 72 110 Q 96 124 120 110"
+              stroke-width="3.5" stroke-linecap="round" fill="none"/>
+        <!-- Neck -->
+        <rect x="82" y="138" width="28" height="18" rx="6" fill="#2d3748"/>
+        <!-- Body -->
+        <rect x="18" y="156" width="156" height="106" rx="28" fill="#1e293b"/>
+        <!-- Chest panel -->
+        <rect x="58" y="176" width="76" height="50" rx="10" fill="#0a1221"/>
+        <!-- Chest buttons -->
+        <circle cx="78"  cy="193" r="7" fill="#38bdf8" opacity="0.85"/>
+        <circle cx="96"  cy="193" r="7" fill="#4ade80" opacity="0.85"/>
+        <circle cx="114" cy="193" r="7" fill="#f87171" opacity="0.85"/>
+        <!-- Speaker -->
+        <rect x="66" y="211" width="60" height="4" rx="2" fill="#38bdf8" opacity="0.35"/>
+        <rect x="66" y="219" width="60" height="4" rx="2" fill="#38bdf8" opacity="0.35"/>
+        <!-- Left arm -->
+        <ellipse cx="10"  cy="192" rx="12" ry="32" fill="#2d3748"/>
+        <circle  cx="10"  cy="224" r="13"  fill="#1e293b"/>
+        <!-- Right arm -->
+        <ellipse cx="182" cy="192" rx="12" ry="32" fill="#2d3748"/>
+        <circle  cx="182" cy="224" r="13"  fill="#1e293b"/>
+        <!-- Shadow -->
+        <ellipse cx="96" cy="272" rx="54" ry="6" fill="#000" opacity="0.2"/>
+      </svg>
+    </div>
 
-      <div class="overlay-tap" aria-hidden="true">
-        <span class="tap-finger">👆</span>
-        <span class="tap-ripple"></span>
+    <h1 class="overlay-title">Didi</h1>
+    <p  class="overlay-sub">Aapki Hinglish English Teacher</p>
+
+    <div class="overlay-tap" aria-hidden="true">
+      <span class="tap-finger">👆</span>
+      <span class="tap-ripple"></span>
+    </div>
+
+    <p class="overlay-hint">Tap karo — phir sirf bolna hai!</p>
+    <p class="overlay-hint-en">Tap anywhere · Voice only · No buttons needed</p>
+
+    <div class="overlay-cmds" aria-label="Voice commands preview">
+      <span class="cmd-chip">"Shuru karo"</span>
+      <span class="cmd-chip">"Band karo"</span>
+      <span class="cmd-chip">"Quiz shuru karo"</span>
+      <span class="cmd-chip">"Dheere bolo"</span>
+    </div>
+  </div>
+</div>
+
+
+<a href="#main" class="skip-link">Skip to main content</a>
+
+
+<!-- ── HEADER ────────────────────────────────────── -->
+<header role="banner">
+  <span class="hdr-icon" aria-hidden="true">🤖</span>
+  <div class="hdr-text">
+    <h1>Didi — Your English Teacher</h1>
+    <p class="hdr-sub">आपकी मुफ्त Hinglish Voice Tutor · Free · Online</p>
+  </div>
+  <div class="tts-badge" id="tts-badge" aria-label="Voice engine status" aria-live="polite">
+    <span class="tts-dot" id="tts-dot"></span>
+    <span id="tts-label">Connecting…</span>
+  </div>
+</header>
+
+
+<main id="main" role="main">
+
+  <!-- Daily Word -->
+  <section class="daily-word" aria-label="Word of the day">
+    <span aria-hidden="true">📚</span>
+    <span class="dw-label">Aaj ka word:</span>
+    <strong id="dw-word" class="dw-word">{{ daily_word.word }}</strong>
+    <span class="dw-dash" aria-hidden="true">—</span>
+    <span id="dw-hindi" class="dw-hindi">{{ daily_word.hindi }}</span>
+  </section>
+
+  <!-- Mode Indicator -->
+  <div id="mode-indicator" class="mode-indicator" role="status" aria-live="polite" hidden>
+    <span id="mode-label"></span>
+    <span class="mode-hint">· "Wapas jao" boliye normal chat ke liye</span>
+  </div>
+
+
+  <!-- ════ TWO-COLUMN: ROBOT | CHAT ════ -->
+  <div class="main-layout">
+
+    <!-- LEFT — Robot Panel -->
+    <div class="robot-panel">
+      <div class="robot-panel-title">DIDI</div>
+
+      <div class="robot-svg-wrap" aria-hidden="true">
+        <svg viewBox="0 0 192 280" width="180" height="263" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Antenna stem -->
+          <line x1="96" y1="10" x2="96" y2="42" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+          <!-- Antenna ball -->
+          <circle class="robot-antenna-ball" cx="96" cy="8" r="7"/>
+
+          <!-- Head shell -->
+          <rect x="28" y="42" width="136" height="100" rx="22" fill="#253352" stroke="#38bdf855" stroke-width="1.5"/>
+          <!-- Ear bolts -->
+          <rect x="16" y="66" width="14" height="30" rx="7" fill="#2e4068" stroke="#38bdf833" stroke-width="1"/>
+          <rect x="162" y="66" width="14" height="30" rx="7" fill="#2e4068" stroke="#38bdf833" stroke-width="1"/>
+
+          <!-- Visor (face screen) -->
+          <rect x="40" y="56" width="112" height="68" rx="14" fill="#0e1b30" stroke="#38bdf844" stroke-width="1"/>
+          <!-- Visor glare -->
+          <rect x="46" y="60" width="38" height="10" rx="5" fill="white" opacity="0.09"/>
+
+          <!-- Eyes -->
+          <ellipse class="robot-eye-left"  cx="78"  cy="88" rx="17" ry="17"/>
+          <ellipse class="robot-eye-right" cx="114" cy="88" rx="17" ry="17"/>
+          <!-- Eye ring -->
+          <ellipse cx="78"  cy="88" rx="20" ry="20" fill="none" stroke="#38bdf822" stroke-width="2"/>
+          <ellipse cx="114" cy="88" rx="20" ry="20" fill="none" stroke="#38bdf822" stroke-width="2"/>
+          <!-- Pupils -->
+          <circle class="robot-pupil-left"  cx="78"  cy="88" r="7"/>
+          <circle class="robot-pupil-right" cx="114" cy="88" r="7"/>
+          <!-- Pupil shine -->
+          <circle cx="82"  cy="84" r="3" fill="white" opacity="0.7"/>
+          <circle cx="118" cy="84" r="3" fill="white" opacity="0.7"/>
+
+          <!-- Mouth -->
+          <path class="robot-mouth" d="M 70 114 Q 96 128 122 114"
+                stroke-width="3.5" stroke-linecap="round" fill="none"/>
+
+          <!-- Neck -->
+          <rect x="82" y="142" width="28" height="18" rx="7" fill="#2e4068" stroke="#38bdf833" stroke-width="1"/>
+
+          <!-- Body -->
+          <rect x="20" y="160" width="152" height="108" rx="26" fill="#253352" stroke="#38bdf855" stroke-width="1.5"/>
+          <!-- Body top highlight -->
+          <rect x="30" y="166" width="132" height="28" rx="18" fill="white" opacity="0.04"/>
+
+          <!-- Chest panel (dark inset) -->
+          <rect x="56" y="180" width="80" height="52" rx="10" fill="#0e1b30" stroke="#38bdf833" stroke-width="1"/>
+
+          <!-- Chest buttons -->
+          <circle cx="76"  cy="197" r="7" fill="#38bdf8"/>
+          <circle cx="96"  cy="197" r="7" fill="#4ade80"/>
+          <circle cx="116" cy="197" r="7" fill="#f87171"/>
+          <!-- Button shine -->
+          <circle cx="74"  cy="195" r="2.5" fill="white" opacity="0.5"/>
+          <circle cx="94"  cy="195" r="2.5" fill="white" opacity="0.5"/>
+          <circle cx="114" cy="195" r="2.5" fill="white" opacity="0.5"/>
+
+          <!-- Speaker grille lines -->
+          <rect x="64" y="218" width="64" height="3.5" rx="1.75" fill="#38bdf8" opacity="0.45"/>
+          <rect x="64" y="226" width="64" height="3.5" rx="1.75" fill="#38bdf8" opacity="0.30"/>
+
+          <!-- Left arm -->
+          <ellipse cx="10"  cy="196" rx="11" ry="30" fill="#2e4068" stroke="#38bdf833" stroke-width="1"/>
+          <circle  cx="10"  cy="226" r="12" fill="#253352" stroke="#38bdf833" stroke-width="1"/>
+          <!-- Right arm -->
+          <ellipse cx="182" cy="196" rx="11" ry="30" fill="#2e4068" stroke="#38bdf833" stroke-width="1"/>
+          <circle  cx="182" cy="226" r="12" fill="#253352" stroke="#38bdf833" stroke-width="1"/>
+
+          <!-- Leg stumps -->
+          <rect x="58" y="264" width="28" height="14" rx="7" fill="#2e4068" stroke="#38bdf833" stroke-width="1"/>
+          <rect x="106" y="264" width="28" height="14" rx="7" fill="#2e4068" stroke="#38bdf833" stroke-width="1"/>
+
+          <!-- Ground shadow -->
+          <ellipse cx="96" cy="278" rx="50" ry="4" fill="#000" opacity="0.25"/>
+        </svg>
       </div>
 
-      <p class="overlay-hint">Tap karo — phir sirf bolna hai!</p>
-      <p class="overlay-hint-en">Tap anywhere · Then speak only · No buttons needed</p>
+      <!-- State label below robot -->
+      <div class="robot-state-label" id="robot-state-label">💤 Waiting…</div>
 
-      <div class="overlay-cmds" aria-label="Voice commands preview">
-        <span class="cmd-chip">"Shuru karo"</span>
-        <span class="cmd-chip">"Band karo"</span>
-        <span class="cmd-chip">"Quiz shuru karo"</span>
-        <span class="cmd-chip">"Dheere bolo"</span>
-        <span class="cmd-chip">"Phir bolo"</span>
+      <!-- Status badge + live transcript -->
+      <div class="robot-mic-badge">
+        <section class="status-wrap" aria-live="polite" aria-atomic="true" aria-label="Bot status">
+          <div class="status-ring" id="status-ring" aria-hidden="true"></div>
+          <div class="status-body">
+            <div class="status-emoji" id="status-emoji" aria-hidden="true">💤</div>
+            <div class="status-msg" id="status-msg">Tap karo shuru karne ke liye</div>
+          </div>
+        </section>
+        <div class="live-tx-bar" aria-live="polite" aria-label="Live transcript">
+          <span class="live-tx-icon" aria-hidden="true">🎙️</span>
+          <span class="live-tx-label">Aap bol rahe ho:</span>
+          <span id="live-tx" class="live-tx-text"></span>
+        </div>
       </div>
-    </div>
+    </div><!-- /robot-panel -->
 
-  </div><!-- /#tap-overlay -->
-
-
-  <!-- Skip link for keyboard / screen-reader -->
-  <a href="#main" class="skip-link">Skip to main content</a>
-
-
-  <!--
-    ════════════════════════════════════════════════════════
-     HEADER
-    ════════════════════════════════════════════════════════
-  -->
-  <header role="banner">
-    <span class="hdr-icon" aria-hidden="true">🎓</span>
-    <div class="hdr-text">
-      <h1>Didi — Your English Teacher</h1>
-      <p class="hdr-sub">आपकी मुफ्त Hinglish Voice Tutor · Free · Online</p>
-    </div>
-    <div class="tts-badge" id="tts-badge" aria-label="Voice engine status" aria-live="polite">
-      <span class="tts-dot" id="tts-dot"></span>
-      <span id="tts-label">Google TTS</span>
-    </div>
-  </header>
-
-
-  <!--
-    ════════════════════════════════════════════════════════
-     MAIN
-    ════════════════════════════════════════════════════════
-  -->
-  <main id="main" role="main">
-
-    <!-- ── Daily Word ──────────────────────────── -->
-    <section class="daily-word" aria-label="Word of the day">
-      <span aria-hidden="true">📚</span>
-      <span class="dw-label">Aaj ka word:</span>
-      <strong id="dw-word" class="dw-word">{{ daily_word.word }}</strong>
-      <span aria-hidden="true" class="dw-dash">—</span>
-      <span id="dw-hindi" class="dw-hindi">{{ daily_word.hindi }}</span>
-    </section>
-
-    <!--
-      ── Mode Indicator Banner ───────────────────
-      Shown only when a sub-mode (quiz / story / pronunciation) is active.
-      Hidden by default via JS / hidden attribute.
-    -->
-    <div id="mode-indicator"
-         class="mode-indicator"
-         role="status"
-         aria-live="polite"
-         hidden>
-      <span id="mode-label"></span>
-      <span class="mode-hint">· "Wapas jao" boliye normal chat ke liye</span>
-    </div>
-
-    <!-- ── BIG STATUS (primary feedback) ──────── -->
-    <section class="status-wrap"
-             aria-live="polite"
-             aria-atomic="true"
-             aria-label="Bot status">
-
-      <div class="status-ring" id="status-ring" aria-hidden="true"></div>
-
-      <div class="status-body">
-        <div class="status-emoji" id="status-emoji" aria-hidden="true">💤</div>
-        <div class="status-msg"  id="status-msg">Tap karo shuru karne ke liye</div>
+    <!-- RIGHT — Chat Panel -->
+    <div class="chat-panel">
+      <div class="chat-panel-hdr">
+        <span class="hdr-title">💬 Conversation with Didi</span>
+        <button class="manual-btn" onclick="openManual()" aria-label="Open voice command guide">
+          📖 User Manual
+        </button>
       </div>
 
-    </section>
-
-    <!-- ── Live Transcript ─────────────────────── -->
-    <div class="live-tx-bar" aria-live="polite" aria-label="What you are saying">
-      <span class="live-tx-icon" aria-hidden="true">🎙️</span>
-      <span class="live-tx-label">Aap bol rahe ho:</span>
-      <span id="live-tx" class="live-tx-text"></span>
-    </div>
-
-    <!-- ── Conversation Log ─────────────────────── -->
-    <section aria-label="Conversation history">
-      <div id="chat-log"
-           class="chat-log"
-           role="log"
-           aria-live="polite"
-           aria-relevant="additions text"
-           tabindex="0">
-
+      <div id="chat-log" class="chat-log" role="log"
+           aria-live="polite" aria-relevant="additions text" tabindex="0">
         <article class="bubble bot-bubble" aria-label="Didi says">
-          <span class="bbl-who" aria-hidden="true">🧕 Didi</span>
+          <span class="bbl-who" aria-hidden="true">🤖 Didi</span>
           <p class="bbl-text">
             Namaste beta! 🙏 Main aapki English teacher hoon.<br/>
-            Pehle screen ko <strong>tap karo</strong> — phir sirf bolna hai, koi button nahi!<br/>
-            Shuru karne ke liye <strong>"Shuru karo"</strong> boliye, phir apna <strong>Student ID number</strong> batao.
+            Pehle screen ko <strong>tap karo</strong> — phir sirf bolna hai!<br/>
+            Shuru karne ke liye <strong>"Shuru karo"</strong> boliye.
           </p>
         </article>
-
       </div>
-    </section>
+    </div><!-- /chat-panel -->
 
-    <!-- ── Voice Command Cheatsheet ─────────────── -->
-    <section class="cmd-sheet" aria-label="Voice commands you can say">
-      <h2 class="cs-title">🗣️ Kya bol sakte ho?</h2>
-      <div class="cs-grid">
+  </div><!-- /main-layout -->
 
-        <div class="cs-row">
-          <kbd>"Shuru karo"</kbd>
-          <span>Bot shuru karo / Start</span>
-        </div>
-        <div class="cs-row">
-          <kbd>"3" / "teen" / "three"</kbd>
-          <span>Apna Student ID boliye (1–20)</span>
-        </div>
-        <div class="cs-row">
-          <kbd>"Band karo"</kbd>
-          <span>Bot band karo / Stop</span>
-        </div>
-        <div class="cs-row">
-          <kbd>"Phir bolo"</kbd>
-          <span>Last reply dobara suno</span>
-        </div>
-        <div class="cs-row">
-          <kbd>"Dheere bolo"</kbd>
-          <span>Didi dheere bolegi</span>
-        </div>
-        <div class="cs-row">
-          <kbd>"Tez bolo"</kbd>
-          <span>Didi tez bolegi</span>
-        </div>
-        <div class="cs-row">
-          <kbd>"Aaj kya seekha" / "Summary"</kbd>
-          <span>Aaj ka session summary suno</span>
-        </div>
-        <div class="cs-row">
-          <kbd>"Last class mein kya seekha"</kbd>
-          <span>Pichli class ka summary suno</span>
-        </div>
-
-        <!-- ── v6 New Commands ── -->
-        <div class="cs-row cs-row-new">
-          <kbd>"Quiz shuru karo"</kbd>
-          <span>📝 Daily quiz shuru karo (5 sawaal)</span>
-        </div>
-        <div class="cs-row cs-row-new">
-          <kbd>"Pronunciation practice"</kbd>
-          <span>🎙️ Words bolne ki practice karo</span>
-        </div>
-        <div class="cs-row cs-row-new">
-          <kbd>"Interactive story"</kbd>
-          <span>📖 Kahani suno + 2 sawaalon ke jawab do</span>
-        </div>
-        <div class="cs-row cs-row-new">
-          <kbd>"Meri progress batao"</kbd>
-          <span>📊 Apni progress suniye</span>
-        </div>
-        <div class="cs-row cs-row-new">
-          <kbd>"Wapas jao"</kbd>
-          <span>↩️ Quiz/Story mode se wapas normal chat</span>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ── Today's Session Progress ────────────── -->
+  <!-- Progress (below grid) -->
+  <div class="bottom-sections">
     <section class="progress" aria-label="Today's session progress">
       <h2 class="prog-title">Aaj ki Progress 📈</h2>
       <div class="prog-grid">
         <div class="prog-stat" aria-label="Sentences spoken">
           <span class="prog-num" id="stat-sentences">0</span>
-          <span class="prog-lbl">Sentences Bole</span>
+          <span class="prog-lbl">Sentences</span>
         </div>
         <div class="prog-stat" aria-label="Words learned">
           <span class="prog-num" id="stat-words">0</span>
-          <span class="prog-lbl">Words Seekhe</span>
+          <span class="prog-lbl">Words</span>
         </div>
         <div class="prog-stat" aria-label="Minutes practiced">
           <span class="prog-num" id="stat-mins">0</span>
-          <span class="prog-lbl">Minutes Practice</span>
+          <span class="prog-lbl">Minutes</span>
         </div>
       </div>
     </section>
+  </div>
 
-    <!--
-      ── Overall / Lifetime Progress (from SQLite) ─
-      Hidden until student logs in, then shown by JS.
-    -->
-    <section class="progress db-progress" id="db-progress"
-             aria-label="Overall lifetime progress"
-             hidden>
-      <h2 class="prog-title">Overall Progress 🏆</h2>
-      <div class="prog-grid">
-        <div class="prog-stat" aria-label="Streak days">
-          <span class="prog-num prog-streak" id="stat-streak">0</span>
-          <span class="prog-lbl">🔥 Streak Days</span>
-        </div>
-        <div class="prog-stat" aria-label="Weekly quiz score">
-          <span class="prog-num prog-quiz" id="stat-quiz-pct">—</span>
-          <span class="prog-lbl">📝 Quiz (7 din)</span>
-        </div>
-        <div class="prog-stat" aria-label="Words practiced total">
-          <span class="prog-num prog-words" id="stat-total-words">—</span>
-          <span class="prog-lbl">🎙️ Words Practiced</span>
-        </div>
+  <!-- Overall / Lifetime Progress (hidden until login) -->
+  <section class="progress db-progress" id="db-progress"
+           aria-label="Overall lifetime progress" hidden style="margin: 0 20px 14px;">
+    <h2 class="prog-title">Overall Progress 🏆</h2>
+    <div class="prog-grid">
+      <div class="prog-stat" aria-label="Streak days">
+        <span class="prog-num prog-streak" id="stat-streak">0</span>
+        <span class="prog-lbl">🔥 Streak</span>
       </div>
-    </section>
+      <div class="prog-stat" aria-label="Weekly quiz score">
+        <span class="prog-num prog-quiz" id="stat-quiz-pct">—</span>
+        <span class="prog-lbl">📝 Quiz</span>
+      </div>
+      <div class="prog-stat" aria-label="Words practiced total">
+        <span class="prog-num prog-words" id="stat-total-words">—</span>
+        <span class="prog-lbl">🎙️ Words</span>
+      </div>
+    </div>
+  </section>
 
-  </main><!-- /main -->
+</main>
+
+<!-- ════ USER MANUAL DRAWER ════ -->
+<div id="manual-overlay" onclick="closeManual()"></div>
+<div id="manual-drawer" role="dialog" aria-label="Voice command guide" aria-modal="true">
+  <div class="manual-hdr">
+    <h2>📖 Voice Command Guide</h2>
+    <button class="manual-close" onclick="closeManual()" aria-label="Close manual">✕</button>
+  </div>
+  <div class="manual-body">
+    <div class="manual-section-title">Getting Started</div>
+    <div class="manual-row"><kbd>"Shuru karo"</kbd><span>Bot shuru karo / Start session</span></div>
+    <div class="manual-row"><kbd>"Band karo"</kbd><span>Bot band karo / Stop session</span></div>
+    <div class="manual-row"><kbd>"1"–"20" / "ek"–"bees"</kbd><span>Apna Student ID boliye</span></div>
+
+    <div class="manual-section-title">Playback</div>
+    <div class="manual-row"><kbd>"Phir bolo"</kbd><span>Last reply dobara suno</span></div>
+    <div class="manual-row"><kbd>"Dheere bolo"</kbd><span>Didi dheere bolegi (slower)</span></div>
+    <div class="manual-row"><kbd>"Tez bolo"</kbd><span>Didi tez bolegi (faster)</span></div>
+
+    <div class="manual-section-title">Practice Modes</div>
+    <div class="manual-row"><kbd>"Quiz shuru karo"</kbd><span>📝 Daily quiz — 5 sawaal</span></div>
+    <div class="manual-row"><kbd>"Pronunciation practice"</kbd><span>🎙️ Words bolne ki practice</span></div>
+    <div class="manual-row"><kbd>"Interactive story"</kbd><span>📖 Kahani + interactive sawaal</span></div>
+    <div class="manual-row"><kbd>"Conversation practice"</kbd><span>💬 Free English conversation</span></div>
+
+    <div class="manual-section-title">Progress &amp; Summary</div>
+    <div class="manual-row"><kbd>"Aaj kya seekha"</kbd><span>📋 Aaj ka session summary</span></div>
+    <div class="manual-row"><kbd>"Last class mein kya seekha"</kbd><span>📅 Pichli class ka summary</span></div>
+    <div class="manual-row"><kbd>"Meri progress batao"</kbd><span>📊 Overall progress suniye</span></div>
+
+    <div class="manual-section-title">Navigation</div>
+    <div class="manual-row"><kbd>"Wapas jao"</kbd><span>↩️ Normal chat mode pe wapas</span></div>
+    <div class="manual-row"><kbd>Esc key</kbd><span>Exit current mode</span></div>
+    <div class="manual-row"><kbd>R key</kbd><span>Repeat last message</span></div>
+  </div>
+</div>
 
 
-  <!--
-    ════════════════════════════════════════════════════════
-     FOOTER
-    ════════════════════════════════════════════════════════
-  -->
-  <footer role="contentinfo">
-    <p>Made with ❤️ for visually impaired students · 100% Voice-Based · Free</p>
-    <p class="ftr-shortcut">Keyboard: <kbd>R</kbd> = Repeat last message &nbsp;|&nbsp; <kbd>Esc</kbd> = Exit mode</p>
-    <p class="ftr-shortcut"><a href="/teacher" style="color:#8b949e;font-size:0.78rem;">Teacher Dashboard →</a></p>
-  </footer>
+<!-- ── FOOTER ──────────────────────────────────────── -->
+<footer role="contentinfo">
+  <p>Made with ❤️ for visually impaired students · 100% Voice-Based · Free</p>
+  <p class="ftr-shortcut">
+    <a href="/teacher">Teacher Dashboard →</a>
+  </p>
+</footer>
 
 
-  <!-- ARIA assertive live region (screen readers) -->
-  <div id="sr-live"
-       role="status"
-       aria-live="assertive"
-       aria-atomic="true"
-       class="sr-only"></div>
+<!-- ARIA live region -->
+<div id="sr-live" role="status" aria-live="assertive" aria-atomic="true" class="sr-only"></div>
 
-  <script src="/static/script.js"></script>
+<script src="/static/script.js"></script>
+<script>
+function openManual() {
+  document.getElementById('manual-drawer').classList.add('open');
+  document.getElementById('manual-overlay').classList.add('open');
+}
+function closeManual() {
+  document.getElementById('manual-drawer').classList.remove('open');
+  document.getElementById('manual-overlay').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeManual(); });
 
+// Keep robot-state-label in sync with status-msg
+(function() {
+  const lbl = document.getElementById('robot-state-label');
+  const src = document.getElementById('status-msg');
+  if (!lbl || !src) return;
+  new MutationObserver(() => { lbl.textContent = src.textContent; })
+    .observe(src, { childList: true, characterData: true, subtree: true });
+})();
+</script>
 </body>
 </html>

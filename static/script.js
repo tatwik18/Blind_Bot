@@ -60,6 +60,7 @@ const State = {
   slowMode    : false,
 
   history         : [],
+  fullHistory     : [],   // uncompressed complete log — never trimmed
   sentencesSpoken : 0,
   wordsLearned    : 0,
   sessionSeconds  : 0,
@@ -592,11 +593,11 @@ function _advancePlanStep() {
 
 /* Auto-save session history to backend (silent, best-effort) */
 function _autoSaveSession() {
-  if (!State.studentId || !State.history.length) return;
+  if (!State.studentId || !State.fullHistory.length) return;
   navigator.sendBeacon(
     '/student/save_session',
     new Blob(
-      [JSON.stringify({ id: String(State.studentId), history: State.history })],
+      [JSON.stringify({ id: String(State.studentId), history: State.fullHistory })],
       { type: 'application/json' }
     )
   );
@@ -646,7 +647,8 @@ async function enterActiveMode(name, isNew, lastHistory) {
   State.studentName = name;
   if (lastHistory && lastHistory.length) {
     // lastHistory = today's existing messages — continue from where left off
-    State.history = [...lastHistory];
+    State.history     = [...lastHistory];
+    State.fullHistory = [...lastHistory];
     // lastSessionHistory is already set from the check response (previous day)
     // Only set it here for new-student path where check didn't run
     if (!State.lastSessionHistory.length) State.lastSessionHistory = [];
@@ -739,6 +741,7 @@ function enterEndMode() {
     State.studentId   = null;
     State.studentName = null;
     State.history     = [];
+    State.fullHistory = [];
     State.lastSessionHistory = [];
     State.sentencesSpoken    = 0;
     State.wordsLearned       = 0;
@@ -1042,6 +1045,7 @@ async function handleUserSpeech(text) {
   const msgToSend = RE_STORY.test(text) ? `__STORY_NOW__ ${text}` : text;
 
   State.history.push({ role: 'user', content: text });
+  State.fullHistory.push({ role: 'user', content: text });
   // History length is now managed by MemoryAgent compression instead of hard shift
 
   State.sentencesSpoken++;
@@ -1066,6 +1070,7 @@ async function handleUserSpeech(text) {
     const lang  = data.language  || 'hinglish';
 
     State.history.push({ role: 'assistant', content: reply });
+    State.fullHistory.push({ role: 'assistant', content: reply });
     if (/word|vocab|matlab|meaning/i.test(text)) State.wordsLearned++;
     updateStats();
 

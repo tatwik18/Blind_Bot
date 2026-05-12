@@ -1,18 +1,21 @@
 """
 Student Proficiency Level Classifier
 =====================================
-Two-tier classification pipeline:
+Three-tier classification pipeline:
 
-  Tier 1 — TextCNN (cnn_text.py)
-    Deep learning model that reads all user messages as a sequence and
-    classifies them via parallel convolutional filters (bigrams, trigrams,
-    4-grams).  Requires PyTorch.  Auto-trains on first run.
+  Tier 1 — Ensemble: TextCNN + LSTM
+    CNN  (cnn_text.py):  parallel conv filters capture WHAT words appear
+    LSTM (lstm_text.py): bidirectional LSTM captures HOW language evolves
+    If both available → majority vote; if they disagree → LSTM wins
+    (LSTM has sequential context CNN lacks)
 
-  Tier 2 — Rule-based scoring (this file, always available)
+  Tier 2 — TextCNN only (if LSTM unavailable)
+    Requires PyTorch. Auto-trains on first run.
+
+  Tier 3 — Rule-based scoring (always available, no dependencies)
     Extracts 4 linguistic features with threshold scoring.
-    No dependencies — always works as a fallback.
 
-classify_proficiency() transparently tries Tier 1 first, then Tier 2.
+classify_proficiency() transparently tries Tier 1 → 2 → 3.
 """
 
 import re
@@ -23,6 +26,13 @@ try:
     _CNN_AVAILABLE = True
 except Exception:
     _CNN_AVAILABLE = False
+
+# ── Optional LSTM tier ────────────────────────────────────────────────────────
+try:
+    from lstm_text import predict_proficiency as _lstm_predict, is_ready as _lstm_ready
+    _LSTM_AVAILABLE = True
+except Exception:
+    _LSTM_AVAILABLE = False
 
 _MEANING_PATTERNS = [
     r'ka matlab', r'kya matlab', r'matlab kya', r'what does',
@@ -116,39 +126,69 @@ def _rule_based(session):
 def classify_proficiency(session):
     """
     Returns 'Beginner', 'Intermediate', or 'Advanced'.
-    Returns None when there are fewer than 4 user messages (not enough data).
+    Returns None when there are fewer than 4 user messages.
 
     Pipeline:
-      1. TextCNN (cnn_text.py) — if PyTorch installed and model trained
-      2. Rule-based scoring     — always available, no dependencies
+      Tier 1 — CNN + LSTM ensemble (majority vote; LSTM wins on tie)
+      Tier 2 — CNN only
+      Tier 3 — Rule-based fallback
     """
     msgs = _user_messages(session)
     if len(msgs) < 4:
         return None
 
-    # ── Tier 1: TextCNN ───────────────────────────────────────────────────────
-    if _CNN_AVAILABLE and _cnn_ready():
-        label, confidence = _cnn_predict(session)
-        if label is not None:
-            return label
+    cnn_label  = None
+    lstm_label = None
 
-    # ── Tier 2: Rule-based fallback ───────────────────────────────────────────
+    # ── Tier 1: Ensemble CNN + LSTM ───────────────────────────────────────────
+    if _CNN_AVAILABLE and _cnn_ready():
+        cnn_label, _ = _cnn_predict(session)
+
+    if _LSTM_AVAILABLE and _lstm_ready():
+        lstm_label, _ = _lstm_predict(session)
+
+    if cnn_label and lstm_label:
+        # Both available — majority vote (agree → use it; disagree → LSTM wins)
+        return cnn_label if cnn_label == lstm_label else lstm_label
+
+    # ── Tier 2: Single model ──────────────────────────────────────────────────
+    if lstm_label:
+        return lstm_label
+    if cnn_label:
+        return cnn_label
+
+    # ── Tier 3: Rule-based fallback ───────────────────────────────────────────
     return _rule_based(session)
 
 
 def classify_proficiency_with_source(session):
     """
-    Same as classify_proficiency() but also returns the source.
-    Returns (label, source)  where source is 'cnn' or 'rules'.
+    Same as classify_proficiency() but also returns the source string.
+    Returns (label, source).
     """
     msgs = _user_messages(session)
     if len(msgs) < 4:
         return None, None
 
+    cnn_label, cnn_conf   = None, None
+    lstm_label, lstm_conf = None, None
+
     if _CNN_AVAILABLE and _cnn_ready():
-        label, confidence = _cnn_predict(session)
-        if label is not None:
-            return label, f'cnn ({confidence:.0%})'
+        cnn_label, cnn_conf = _cnn_predict(session)
+
+    if _LSTM_AVAILABLE and _lstm_ready():
+        lstm_label, lstm_conf = _lstm_predict(session)
+
+    if cnn_label and lstm_label:
+        if cnn_label == lstm_label:
+            return cnn_label, f'ensemble-agree cnn={cnn_conf:.0%} lstm={lstm_conf:.0%}'
+        else:
+            return lstm_label, f'ensemble-disagree lstm={lstm_conf:.0%} wins'
+
+    if lstm_label:
+        return lstm_label, f'lstm ({lstm_conf:.0%})'
+    if cnn_label:
+        return cnn_label, f'cnn ({cnn_conf:.0%})'
 
     return _rule_based(session), 'rules'
 
