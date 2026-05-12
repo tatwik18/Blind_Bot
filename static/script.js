@@ -89,6 +89,12 @@ const State = {
 
   // ── Confidence scoring ─────────────────────
   confidence    : { silenceCount: 0, retryCount: 0, responseTimes: [], questionStartedAt: 0 },
+
+  // ── Agentic session state ───────────────────
+  sessionPlan   : [],     // 5-step plan from PlannerAgent
+  planStepIdx   : 0,      // current step index
+  memoryNote    : '',     // compressed memory from MemoryAgent
+  isCompressing : false,  // lock to prevent concurrent compressions
 };
 
 /* ══════════════════════════════════════════
@@ -516,6 +522,103 @@ function sanitiseName(raw) {
 
 
 /* ══════════════════════════════════════════
+   AGENTIC HELPERS
+══════════════════════════════════════════ */
+
+/* PlannerAgent — fetch a 5-step session plan after login */
+async function _fetchSessionPlan(name, proficiency, weakWords, hasHistory) {
+  try {
+    const res = await fetch('/session/plan', {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body   : JSON.stringify({
+        student_name: name,
+        proficiency : proficiency || 'Beginner',
+        weak_words  : weakWords  || [],
+        has_history : hasHistory,
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    const data = await res.json();
+    if (data.plan && data.plan.length) {
+      State.sessionPlan  = data.plan;
+      State.planStepIdx  = 0;
+      _updatePlanUI();
+      console.log('[Didi Agent] Plan:', data.plan.map(s => s.type).join(' → '));
+    }
+  } catch (_) {
+    /* plan is optional — silently continue without it */
+  }
+}
+
+/* MemoryAgent — compress history when it gets too long */
+async function _tryCompressHistory() {
+  if (State.history.length < 14 || State.isCompressing) return;
+  State.isCompressing = true;
+  try {
+    const res = await fetch('/session/compress', {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body   : JSON.stringify({
+        history     : State.history,
+        student_name: State.studentName || 'beta',
+        keep_recent : 6,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const data = await res.json();
+    if (data.compressed) {
+      State.history    = data.history;
+      State.memoryNote = data.memory_summary;
+      console.log('[Didi Agent] Memory compressed:', data.memory_summary);
+    }
+  } catch (_) {
+    /* silently skip — history will just stay full */
+  } finally {
+    State.isCompressing = false;
+  }
+}
+
+/* Advance the plan step every 3 user turns */
+function _advancePlanStep() {
+  if (!State.sessionPlan.length) return;
+  const userTurns = State.history.filter(t => t.role === 'user').length;
+  const newIdx    = Math.min(Math.floor(userTurns / 3), State.sessionPlan.length - 1);
+  if (newIdx !== State.planStepIdx) {
+    State.planStepIdx = newIdx;
+    _updatePlanUI();
+  }
+}
+
+/* Auto-save session history to backend (silent, best-effort) */
+function _autoSaveSession() {
+  if (!State.studentId || !State.history.length) return;
+  navigator.sendBeacon(
+    '/student/save_session',
+    new Blob(
+      [JSON.stringify({ id: String(State.studentId), history: State.history })],
+      { type: 'application/json' }
+    )
+  );
+}
+
+/* Show current plan step in the mode indicator */
+function _updatePlanUI() {
+  if (!El.modeIndicator || !El.modeLabel) return;
+  const step = State.sessionPlan[State.planStepIdx];
+  if (!step || State.subMode) return;   // sub-mode label takes priority
+  const emojis = {
+    warm_up: '👋', vocabulary: '📚', grammar: '📖', story: '📖',
+    quiz: '📝', pronunciation: '🎙️', conversation: '💬', confidence_boost: '⭐',
+  };
+  const emoji = emojis[step.type] || '📚';
+  El.modeLabel.textContent   = `${emoji} Step ${step.step}: ${step.type.replace(/_/g, ' ')}`;
+  El.modeIndicator.hidden    = false;
+  El.modeIndicator.className = 'mode-indicator mode-plan';
+}
+
+
+/* ══════════════════════════════════════════
    MODE TRANSITIONS
 ══════════════════════════════════════════ */
 
@@ -542,15 +645,36 @@ async function enterActiveMode(name, isNew, lastHistory) {
   State.mode        = Mode.ACTIVE;
   State.studentName = name;
   if (lastHistory && lastHistory.length) {
-    State.lastSessionHistory = lastHistory;
+    // lastHistory = today's existing messages — continue from where left off
     State.history = [...lastHistory];
+    // lastSessionHistory is already set from the check response (previous day)
+    // Only set it here for new-student path where check didn't run
+    if (!State.lastSessionHistory.length) State.lastSessionHistory = [];
   }
   startSessionTimer();
   _resetConfidence();
 
+  // Reset agentic state for new session
+  State.sessionPlan  = [];
+  State.planStepIdx  = 0;
+  State.memoryNote   = '';
+  State.isCompressing= false;
+
   // Load SQLite progress from backend (streak, quiz %)
+  // Then use the loaded data to kick off the PlannerAgent in background
   if (State.studentId) {
-    _loadProgressStats(String(State.studentId), name);
+    const sid = String(State.studentId);
+    _loadProgressStats(sid, name);
+    // Fetch plan in background — non-blocking, session works fine without it
+    fetch(`/progress/${encodeURIComponent(sid)}`)
+      .then(r => r.json())
+      .then(d => {
+        const prof = d.proficiency || 'Beginner';
+        return fetch(`/words/weak/${encodeURIComponent(sid)}`)
+          .then(r => r.json())
+          .then(w => _fetchSessionPlan(name, prof, w.words || [], lastHistory.length > 0));
+      })
+      .catch(() => {});
   }
 
   let welcome = isNew
@@ -586,20 +710,10 @@ function enterEndMode() {
   _clearSilenceTimer();
   _setSubMode(SubMode.NONE);
 
-  // Save chat history (existing JSON system)
-  if (State.studentId && State.history.length) {
-    fetch('/student/save_session', {
-      method : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body   : JSON.stringify({ id: String(State.studentId), history: State.history }),
-    }).catch(() => {});
-  }
-
-  // Save SQLite progress stats
+  // Save session data (both systems)
+  _autoSaveSession();
   if (State.studentId && State.studentName) {
     const minutes = Math.floor(State.sessionSeconds / 60);
-    const confidence = _computeConfidenceScore();
-
     fetch('/progress/update', {
       method : 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -614,31 +728,46 @@ function enterEndMode() {
     .then(r => r.json())
     .then(d => { if (d.streak) State.streak = d.streak; })
     .catch(() => {});
-
-    // Speak confidence feedback at session end
-    _speakConfidenceFeedback(confidence);
   }
 
-  const name = State.studentName || 'beta';
-  const bye  = `Bye bye ${name}! Aaj bahut achha practice kiya. Jab chahein wapas aana — phir "Shuru karo" boliye!`;
+  const name       = State.studentName || 'beta';
+  const confidence = _computeConfidenceScore();
+  const bye        = `Bye bye ${name}! Aaj bahut achha practice kiya. Jab chahein wapas aana — phir "Shuru karo" boliye!`;
 
-  // Small delay to let confidence feedback play first if any
-  setTimeout(() => {
-    _botSay(bye, 'hinglish', () => {
-      State.mode       = Mode.PASSIVE;
-      State.studentId  = null;
-      State.studentName= null;
-      State.history    = [];
-      State.lastSessionHistory = [];
-      State.sentencesSpoken    = 0;
-      State.wordsLearned       = 0;
-      State.sessionSeconds     = 0;
-      updateStats();
-      _updateDbStats(0, 0, 0);
-      setStatus('passive', '👂', '"Shuru karo" boliye dobara shuru karne ke liye…');
-      scheduleRestart(600);
+  function _resetAndReturn() {
+    State.mode        = Mode.PASSIVE;
+    State.studentId   = null;
+    State.studentName = null;
+    State.history     = [];
+    State.lastSessionHistory = [];
+    State.sentencesSpoken    = 0;
+    State.wordsLearned       = 0;
+    State.sessionSeconds     = 0;
+    State.sessionPlan        = [];
+    State.planStepIdx        = 0;
+    State.memoryNote         = '';
+    State.isCompressing      = false;
+    updateStats();
+    _updateDbStats(0, 0, 0);
+    setStatus('passive', '👂', '"Shuru karo" boliye dobara shuru karne ke liye…');
+    scheduleRestart(600);
+  }
+
+  // Build confidence message (may be empty)
+  let confMsg = '';
+  if      (confidence >= 80) confMsg = 'Aaj aapne bahut tez aur confident jawab diye! Great confidence!';
+  else if (confidence >= 60) confMsg = 'Aapka confidence badh raha hai! Roz practice karo!';
+  else if (confidence >= 40) confMsg = 'Aap seekh rahe ho. Har din thoda aur confident hoge!';
+
+  // Chain: confidence message (if any) → bye → reset
+  // This guarantees only ONE voice plays at a time
+  if (confMsg) {
+    _botSay(confMsg, 'hinglish', () => {
+      _botSay(bye, 'hinglish', _resetAndReturn);
     });
-  }, 1200);
+  } else {
+    _botSay(bye, 'hinglish', _resetAndReturn);
+  }
 }
 
 
@@ -684,9 +813,10 @@ async function _handleIdentifying(text) {
     const data = await res.json();
 
     if (data.exists) {
-      State.studentId    = id;
-      State.isProcessing = false;
-      await enterActiveMode(data.name, false, data.last_session || []);
+      State.studentId          = id;
+      State.lastSessionHistory = data.last_session || [];   // previous day — for recap
+      State.isProcessing       = false;
+      await enterActiveMode(data.name, false, data.today_history || []);
     } else {
       State.isProcessing = false;
       State.mode = Mode.REGISTERING;
@@ -912,7 +1042,7 @@ async function handleUserSpeech(text) {
   const msgToSend = RE_STORY.test(text) ? `__STORY_NOW__ ${text}` : text;
 
   State.history.push({ role: 'user', content: text });
-  if (State.history.length > 14) State.history.shift();
+  // History length is now managed by MemoryAgent compression instead of hard shift
 
   State.sentencesSpoken++;
   updateStats();
@@ -921,7 +1051,12 @@ async function handleUserSpeech(text) {
     const res = await fetch('/chat', {
       method : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body   : JSON.stringify({ message: msgToSend, history: State.history }),
+      body   : JSON.stringify({
+        message    : msgToSend,
+        history    : State.history,
+        plan_step  : State.sessionPlan[State.planStepIdx] || null,
+        memory_note: State.memoryNote || '',
+      }),
       signal : AbortSignal.timeout(25_000),
     });
 
@@ -933,6 +1068,12 @@ async function handleUserSpeech(text) {
     State.history.push({ role: 'assistant', content: reply });
     if (/word|vocab|matlab|meaning/i.test(text)) State.wordsLearned++;
     updateStats();
+
+    // Advance plan step + trigger memory compression if history is growing
+    _advancePlanStep();
+    _tryCompressHistory();
+    _autoSaveSession();   // persist after every turn
+
     _botSay(reply, lang);
 
   } catch (err) {
@@ -1499,6 +1640,13 @@ document.addEventListener('keydown', (e) => {
     _botSay('Sub-mode se wapas aa gayi. Normal chat mein hoon ab!', 'hinglish');
   }
 });
+
+
+/* ══════════════════════════════════════════
+   PAGE UNLOAD — save session before tab closes
+══════════════════════════════════════════ */
+window.addEventListener('beforeunload', () => { _autoSaveSession(); });
+window.addEventListener('pagehide',     () => { _autoSaveSession(); });
 
 
 /* ══════════════════════════════════════════

@@ -30,6 +30,10 @@ import requests
 from classifier import classify_proficiency, get_proficiency_prompt_addon
 from clustering  import cluster_students
 import database  as db
+from agents import (
+    run_planner, compress_history, build_memory_addon,
+    reflect, get_intent_context, parallel_classify,
+)
 from quiz_data   import QUIZ_QUESTIONS, PRONUNCIATION_WORDS
 from story_data  import STORIES
 from cnn_text    import ensure_model_trained as _cnn_text_init
@@ -111,12 +115,30 @@ Advanced: fluent conversation, sharing opinions, storytelling, professional Engl
 ━━━ CONVERSATION MODE — WHEN STUDENT WANTS TO TALK IN ENGLISH ━━━
 If student says anything like "chalo english mein baat karte hain", "let us talk", "english mein bolna hai", "conversation karo":
 Start a real two-way English conversation IMMEDIATELY.
+
+LANGUAGE RULE FOR CONVERSATION MODE (overrides the general 65/35 rule):
+- Ask ALL your questions in simple English. This is English practice time.
+- Keep your sentences short and easy — beginner-friendly English only.
+- After the student answers, respond in English first, then add ONE Hindi sentence for comfort.
+
+WHEN STUDENT ANSWERS IN HINDI OR HINGLISH:
+Do NOT just move on. Gently ask them to try saying the same thing in English.
+Example:
+Student says: "mujhe football pasand hai"
+Didi says: "Arre waah! Ab isko English mein bolne ki koshish karo — try saying: I like football. Kaho mere saath!"
+Then wait for them to try, praise them, and continue the conversation in English.
+
+Example:
+Student says: "ronaldo"
+Didi says: "Great choice! Now try a full English sentence — say: My favourite player is Ronaldo. Try it!"
+
 Ask natural questions like a friend would. Examples:
-"Great! What is your name and where are you from?"
-"Wonderful! Tell me — what do you like to do in your free time?"
-"Nice! Do you have any brothers or sisters?"
-"Interesting! What is your favourite subject in school?"
-Keep the conversation flowing naturally. One question at a time. Wait for their answer. Then respond to what they said and ask the next question.
+"What do you like to do in your free time?"
+"Tell me — do you have any brothers or sisters?"
+"What is your favourite subject in school?"
+"Which sport do you like most?"
+Keep the conversation flowing. One question at a time. Wait for their answer.
+If the student answers in English — even broken English — praise them warmly before moving on.
 Do NOT go back to drilling sentences. This is free conversation time.
 
 ━━━ AUTO-CORRECT — WHATSAPP STYLE ━━━
@@ -241,6 +263,23 @@ _init_gemini()
 # ─────────────────────────────────────────────
 STUDENT_DB_PATH = os.path.join(os.path.dirname(__file__), 'students.json')
 _db_lock = threading.Lock()
+
+
+def _migrate_student(record: dict) -> dict:
+    """
+    One-time migration: convert old flat last_session → sessions dict keyed by date.
+    Safe to call on every read — is a no-op when already migrated.
+    """
+    if 'sessions' not in record:
+        record['sessions'] = {}
+        old = record.pop('last_session', [])
+        if old:
+            date_key = record.get('last_seen', str(datetime.date.today()))
+            record['sessions'][date_key] = old
+    elif 'last_session' in record:
+        # Remove stale key left from a partial migration
+        record.pop('last_session', None)
+    return record
 
 
 def _load_students() -> dict:
@@ -439,6 +478,53 @@ def get_response(message: str, history: list, extra_prompt: str = "") -> tuple[s
 
 
 # ─────────────────────────────────────────────
+#  Neutral LLM caller (for agent utility tasks)
+# ─────────────────────────────────────────────
+_NEUTRAL_SYSTEM = "You are a precise assistant. Follow instructions exactly. Return only what is asked."
+
+
+def get_response_neutral(message: str, history: list, extra_prompt: str = "") -> tuple[str, str]:
+    """
+    Minimal-persona LLM call for agent utility work (planning, memory compression,
+    reflection, intent classification). Uses a neutral system prompt so the LLM
+    doesn't respond as Didi.
+    """
+    if _GROQ_KEY:
+        try:
+            msgs = [{"role": "system", "content": _NEUTRAL_SYSTEM}]
+            msgs.append({"role": "user", "content": message})
+            resp = requests.post(
+                _GROQ_URL,
+                headers={"Authorization": f"Bearer {_GROQ_KEY}", "Content-Type": "application/json"},
+                json={"model": _GROQ_MODEL, "messages": msgs, "max_tokens": 900, "temperature": 0.2},
+                timeout=25,
+            )
+            if resp.status_code == 200:
+                return resp.json()["choices"][0]["message"]["content"].strip(), "groq"
+        except Exception as e:
+            print(f"[Groq neutral] {type(e).__name__}: {e}")
+
+    if _gemini_client:
+        try:
+            contents = [_gtypes.Content(role="user", parts=[_gtypes.Part(text=message)])]
+            config = _gtypes.GenerateContentConfig(
+                system_instruction=_NEUTRAL_SYSTEM,
+                max_output_tokens=900,
+                temperature=0.2,
+            )
+            response = _gemini_client.models.generate_content(
+                model="models/gemini-2.5-flash",
+                contents=contents,
+                config=config,
+            )
+            return response.text.strip(), "gemini"
+        except Exception as e:
+            print(f"[Gemini neutral] {type(e).__name__}: {e}")
+
+    return "", "error"
+
+
+# ─────────────────────────────────────────────
 #  Daily Vocab
 # ─────────────────────────────────────────────
 DAILY_VOCAB = [
@@ -498,19 +584,33 @@ def chat():
     if not data or not data.get("message", "").strip():
         return jsonify({"error": "No message provided"}), 400
 
-    msg      = data["message"].strip()
-    history  = data.get("history", [])
-    language = detect_language(msg)
+    msg         = data["message"].strip()
+    history     = data.get("history", [])
+    language    = detect_language(msg)
+    plan_step   = data.get("plan_step")       # current session plan step (from frontend)
+    memory_note = data.get("memory_note", "") # compressed memory summary (from frontend)
 
-    level       = classify_proficiency(history)
-    extra_prompt = get_proficiency_prompt_addon(level) if level else ""
+    # ── Parallel: proficiency classification + intent detection ───────────────
+    level, intent = parallel_classify(history, msg, get_response_neutral)
+
+    # ── Build context addons ──────────────────────────────────────────────────
+    extra_prompt  = get_proficiency_prompt_addon(level) if level else ""
+    extra_prompt += get_intent_context(intent, plan_step)
+    if memory_note:
+        extra_prompt += build_memory_addon(memory_note)
+
+    # ── Generate Didi's response ──────────────────────────────────────────────
     reply, source = get_response(msg, history, extra_prompt)
+
+    # ── Reflect: accessibility check (fast pre-check, LLM only if needed) ────
+    reply = reflect(reply, get_response_neutral)
 
     return jsonify({
         "response"   : reply,
         "source"     : source,
         "language"   : language,
         "proficiency": level,
+        "intent"     : intent,
     })
 
 
@@ -577,16 +677,34 @@ def vocab_random():
 
 @app.route("/student/check")
 def student_check():
-    """Check if a student ID (1–20) exists. Returns name + last_session if found."""
+    """
+    Check if a student ID (1–20) exists.
+    Returns:
+      today_history  — messages from today's session (to continue where left off)
+      last_session   — most recent PREVIOUS day's session (for last-class summary)
+      sessions       — full date-keyed history dict
+    """
     sid = request.args.get("id", "").strip()
     if not sid.isdigit() or not (1 <= int(sid) <= 20):
         return jsonify({"error": "Invalid ID — must be 1 to 20"}), 400
     db = _load_students()
     if sid in db:
+        record = _migrate_student(db[sid])
+        _save_students(db)                          # persist migration immediately
+
+        today    = str(datetime.date.today())
+        sessions = record.get('sessions', {})
+        today_history = sessions.get(today, [])
+
+        # last_session = the most recent day that is NOT today (for recap feature)
+        prev_dates   = sorted((d for d in sessions if d != today), reverse=True)
+        last_session = sessions[prev_dates[0]] if prev_dates else []
+
         return jsonify({
-            "exists"      : True,
-            "name"        : db[sid]["name"],
-            "last_session": db[sid].get("last_session", []),
+            "exists"       : True,
+            "name"         : record["name"],
+            "today_history": today_history,
+            "last_session" : last_session,
         })
     return jsonify({"exists": False})
 
@@ -608,9 +726,10 @@ def student_register():
         return jsonify({"error": "ID already taken", "name": db[sid]["name"]}), 409
 
     db[sid] = {
-        "name"        : name,
-        "created_at"  : str(datetime.date.today()),
-        "last_session": [],
+        "name"      : name,
+        "created_at": str(datetime.date.today()),
+        "last_seen" : str(datetime.date.today()),
+        "sessions"  : {},
     }
     _save_students(db)
     return jsonify({"success": True, "name": name})
@@ -618,48 +737,65 @@ def student_register():
 
 @app.route("/student/save_session", methods=["POST"])
 def save_session():
-    """Persist the last 20 chat turns for a student."""
+    """
+    Persist the current session under today's date.
+    Each calendar day gets its own entry — previous days are never overwritten.
+    """
     data    = request.get_json(silent=True) or {}
     sid     = str(data.get("id",      "")).strip()
     history = data.get("history", [])
+    today   = str(datetime.date.today())
 
     db = _load_students()
     if sid in db:
-        db[sid]["last_session"] = history[-20:]
-        db[sid]["last_seen"]    = str(datetime.date.today())
+        record = _migrate_student(db[sid])
+        record['sessions'][today] = history          # save/replace today only
+        record['last_seen'] = today
         level = classify_proficiency(history)
         if level:
-            db[sid]["proficiency"] = level
+            record['proficiency'] = level
+        db[sid] = record
         _save_students(db)
     return jsonify({"success": True})
 
 
 @app.route("/teacher")
 def teacher_dashboard():
-    """Teacher-facing page — shows all student accounts and their saved histories."""
+    """Teacher-facing page — shows all student accounts with per-day session history."""
     db = _load_students()
-    # Build a list of all 20 slots, filled or empty
     slots = []
     for i in range(1, 21):
         sid = str(i)
         if sid in db:
-            s       = db[sid]
-            session = s.get("last_session", [])
-            # Use stored proficiency or compute it on-the-fly
-            proficiency = s.get("proficiency") or classify_proficiency(session)
+            s        = _migrate_student(db[sid])
+            sessions = s.get('sessions', {})
+
+            # Most recent session for proficiency calc
+            latest_msgs = []
+            if sessions:
+                latest_msgs = sessions[max(sessions.keys())]
+
+            proficiency = s.get('proficiency') or classify_proficiency(latest_msgs)
+            total_msgs  = sum(len(v) for v in sessions.values())
+
+            # Sessions sorted newest-first for display
+            sorted_sessions = dict(sorted(sessions.items(), reverse=True))
+
             slots.append({
-                "id"          : i,
-                "occupied"    : True,
-                "name"        : s.get("name", "—"),
-                "created_at"  : s.get("created_at", "—"),
-                "last_seen"   : s.get("last_seen", "—"),
-                "msg_count"   : len(session),
-                "last_session": session,
-                "proficiency" : proficiency,
+                "id"             : i,
+                "occupied"       : True,
+                "name"           : s.get("name", "—"),
+                "created_at"     : s.get("created_at", "—"),
+                "last_seen"      : s.get("last_seen", "—"),
+                "msg_count"      : total_msgs,
+                "last_session"   : latest_msgs,       # kept for cluster_students compat
+                "sessions_by_day": sorted_sessions,   # new: date → messages
+                "proficiency"    : proficiency,
             })
         else:
             slots.append({"id": i, "occupied": False})
 
+    _save_students(db)   # persist any migrations done above
     clusters = cluster_students(db)
     return render_template("teacher.html", slots=slots, clusters=clusters)
 
@@ -695,6 +831,56 @@ def generate_summary():
 
     reply, source = get_response(tag, history)
     return jsonify({"response": reply, "source": source, "language": "hinglish"})
+
+
+# ─────────────────────────────────────────────
+#  Agentic Routes
+# ─────────────────────────────────────────────
+
+@app.route("/session/plan", methods=["POST"])
+def session_plan():
+    """
+    PlannerAgent — generate a personalised 5-step lesson plan at session start.
+    Body: { student_name, proficiency, weak_words, has_history }
+    Returns: { plan: [{step, type, instruction, context_injection}] }
+    """
+    data         = request.get_json(silent=True) or {}
+    name         = str(data.get("student_name", "beta")).strip()[:60] or "beta"
+    proficiency  = str(data.get("proficiency", "Beginner")).strip()
+    weak_words   = data.get("weak_words", [])
+    has_history  = bool(data.get("has_history", False))
+
+    plan = run_planner(name, proficiency, weak_words, has_history, get_response_neutral)
+    return jsonify({"plan": plan})
+
+
+@app.route("/session/compress", methods=["POST"])
+def session_compress():
+    """
+    MemoryAgent — compress old conversation turns into a memory summary.
+    Body: { history, student_name, keep_recent }
+    Returns: { compressed, memory_summary, history }
+    """
+    data         = request.get_json(silent=True) or {}
+    history      = data.get("history", [])
+    student_name = str(data.get("student_name", "beta")).strip()[:60] or "beta"
+    keep_recent  = max(4, int(data.get("keep_recent", 6)))
+
+    if len(history) < 10:
+        return jsonify({"compressed": False, "history": history})
+
+    old_turns    = history[:-keep_recent]
+    recent_turns = history[-keep_recent:]
+
+    summary = compress_history(old_turns, student_name, get_response_neutral)
+    if not summary:
+        return jsonify({"compressed": False, "history": history})
+
+    return jsonify({
+        "compressed"    : True,
+        "memory_summary": summary,
+        "history"       : recent_turns,
+    })
 
 
 # ─────────────────────────────────────────────
@@ -991,4 +1177,12 @@ def story_interactive():
 def weak_words(sid):
     """Return up to 5 words a student most often mispronounces."""
     return jsonify({"words": db.get_weak_words(sid.strip())})
+
+
+# Start background workers (runs under both gunicorn and direct python)
+threading.Thread(target=_precache_worker, daemon=True).start()
+threading.Thread(target=_cnn_text_init, kwargs={"verbose": True}, daemon=True).start()
+
+if __name__ == "__main__":
+    app.run(debug=False, host="0.0.0.0", port=PORT)
 

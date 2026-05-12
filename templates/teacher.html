@@ -168,6 +168,17 @@
       padding: 20px 0;
     }
 
+    .session-day { margin-bottom: 18px; }
+    .session-date-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border, #30363d);
+      padding-bottom: 5px;
+      margin-bottom: 8px;
+    }
     .msg { margin-bottom: 10px; }
     .msg-who {
       font-size: 0.7rem;
@@ -381,13 +392,18 @@
 
       {% if s.occupied %}
       <div class="card-body">
-        {% if s.last_session %}
-          {% for turn in s.last_session %}
-          <div class="msg {{ turn.role if turn.role == 'user' else 'bot' }}">
-            <div class="msg-who">
-              {{ '👤 Student' if turn.role == 'user' else '🧕 Didi' }}
+        {% if s.sessions_by_day %}
+          {% for date, messages in s.sessions_by_day.items() %}
+          <div class="session-day">
+            <div class="session-date-label">📅 {{ date }}</div>
+            {% for turn in messages %}
+            <div class="msg {{ turn.role if turn.role == 'user' else 'bot' }}">
+              <div class="msg-who">
+                {{ '👤 Student' if turn.role == 'user' else '🧕 Didi' }}
+              </div>
+              <div class="msg-text">{{ turn.content }}</div>
             </div>
-            <div class="msg-text">{{ turn.content }}</div>
+            {% endfor %}
           </div>
           {% endfor %}
         {% else %}

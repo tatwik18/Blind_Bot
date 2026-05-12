@@ -40,7 +40,13 @@ def _extract_features(record):
     Build a normalised feature dict for one student.
     Returns None when the student has fewer than 2 user messages.
     """
-    session   = record.get('last_session', [])
+    # Support both new sessions dict and legacy last_session flat list
+    sessions = record.get('sessions', {})
+    if sessions:
+        # Combine all messages across all days for clustering
+        session = [msg for day_msgs in sessions.values() for msg in day_msgs]
+    else:
+        session = record.get('last_session', [])
     user_msgs = [
         t['content'] for t in session
         if t.get('role') == 'user' and t.get('content', '').strip()
